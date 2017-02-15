@@ -23,18 +23,25 @@ object HBasetoHive {
     HBASE_COLUMN_FAMILY="emp"
     // Initializing Hive Metastore configuration
     HIVE_DATA_WAREHOUSE = "/usr/local/hive/warehouse"
-    // setting spark application
-    val sparkConf = new SparkConf().setAppName(APP_NAME)
-    //initialize the spark context
-    val sparkContext = new SparkContext(sparkConf)
+
+    // Enable Hive with Hive warehouse in SparkSession
+    val spark = SparkSession.builder().appName(APP_NAME).config("spark.sql.warehouse.dir", HIVE_DATA_WAREHOUSE).enableHiveSupport().getOrCreate()
+    // Importing spark implicits and sql package
+    import spark.implicits._
+    import spark.sql
+
+//    // setting spark application
+//    val sparkConf = new SparkConf().setAppName(APP_NAME)
+//    //initialize the spark context
+//    val sparkContext = new SparkContext(sparkConf)
     //Configuring Hbase host with Spark/Hadoop Configuration
-    sparkContext.hadoopConfiguration.set("spark.hbase.host", HBASE_DB_HOST)
+    spark.sparkContext.hadoopConfiguration.set("spark.hbase.host", HBASE_DB_HOST)
     // Read HBase Table
-    val hBaseRDD = sparkContext.hbaseTable[(Option[String], Option[String], Option[String], Option[String], Option[String])]("university").select("stid", "name","subject","grade","city").inColumnFamily("emp")
+    val hBaseRDD = spark.sparkContext.hbaseTable[(Option[String], Option[String], Option[String], Option[String], Option[String])]("university").select("stid", "name","subject","grade","city").inColumnFamily("emp")
     // Iterate HBaseRDD and generate RDD[Row]
     val rowRDD = hBaseRDD.map(i => Row(i._1.get,i._2.get,i._3.get,i._4.get,i._5.get))
     // Create sqlContext for createDataFrame method
-    val sqlContext = new org.apache.spark.sql.SQLContext(sparkContext)
+    // val sqlContext = new org.apache.spark.sql.SQLContext(sparkContext)
     // Create Schema Structure
     object empSchema {
       val stid = StructField("stid", StringType)
@@ -45,14 +52,9 @@ object HBasetoHive {
       val struct = StructType(Array(stid, name, subject, grade, city))
     }
 
-    import sqlContext.implicits._
+//    import sqlContext.implicits._
     // Create DataFrame with rowRDD and Schema structure
-    val stdDf = sqlContext.createDataFrame(rowRDD,empSchema.struct);
-    // Enable Hive with Hive warehouse in SparkSession
-    val spark = SparkSession.builder().appName(APP_NAME).config("spark.sql.warehouse.dir", HIVE_DATA_WAREHOUSE).enableHiveSupport().getOrCreate()
-    // Importing spark implicits and sql package
-    import spark.implicits._
-    import spark.sql
+    val stdDf = spark.sqlContext.createDataFrame(rowRDD,empSchema.struct);
 
     // Saving Dataframe to Hive Table Successfully.
     stdDf.write.mode("append").saveAsTable("employee")
